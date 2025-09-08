@@ -1,7 +1,8 @@
 """
-Discrete Customized Fourier Transform
+Customized Discrete Fourier Transform
 
-A variation on the idea of the discrete fourier transform
+A variation on the idea of the discrete fourier transform that
+adds custom frequencies into the process
 
 """
 import numpy as np
@@ -24,7 +25,7 @@ def cmatrix(samples, srate, freqs, phase =0 ):
     return np.array(waves)
 
 
-def dcft_coeff(cmatrix,signal, **kwargs):
+def cdft_coeff(cmatrix,signal, **kwargs):
     """
     Get the coefficients associated with the dot product the cmatrix
     and signal
@@ -50,23 +51,23 @@ def dcft_coeff(cmatrix,signal, **kwargs):
     return output
 
 
-def dcft_amplitude(coeff, signal):
+def cdft_amplitude(coeff, signal):
     # normalize the coefficients
     return np.abs(coeff) /len(signal)
 
 
-def dcft(cmatrix,signal, **kwargs):
+def cdft(cmatrix,signal, **kwargs):
     """
     the discrete customized transform
     """
-    output = dcft_coeff(cmatrix, signal, **kwargs)
-    output = dcft_amplitude(output, signal)
+    output = cdft_coeff(cmatrix, signal, **kwargs)
+    output = cdft_amplitude(output, signal)
     return output
 
 
-def get_freq(dcft_amplitude, freqs):
-    assert(dcft_amplitude.shape == freqs.shape)
-    return freqs[np.argmax(dcft_amplitude)]
+def get_freq(cdft_amplitude, freqs):
+    assert(cdft_amplitude.shape == freqs.shape)
+    return freqs[np.argmax(cdft_amplitude)]
 
 
 """

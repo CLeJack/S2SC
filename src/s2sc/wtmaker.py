@@ -6,11 +6,41 @@ from scipy.io import wavfile
 from scipy import interpolate
 
 import tuning as T
-
+import matrices as M
 
 import os
 from pathlib import Path
 import re
+
+
+class Audio:
+
+    def __init__(self, srate, values):
+        self.srate = srate
+        self.values = values
+        self.freq = 0
+
+    @classmethod
+    def fromfilename(cls, filename):
+        data = wavfile.read(filename)
+        srate = data[0]
+        values = data[1]
+        # data will be normalized internally
+        # so attempt a mixdown if there are more than one channels
+        if len(values.shape) > 1:
+            values = data[1].sum(axis = 1)
+        return cls(srate, values)
+    
+    @classmethod
+    def from_arr(cls, srate, arr):
+        return cls(srate, arr)
+        
+    def samples(self):
+        return self.values.shape[0]
+
+    def set_freq(self, cmat, freqs):
+        transform = M.cdft(cmat, self.values)
+        self.freq = M.get_freq(transform, freqs)
 
 class SignalData():
     
