@@ -19,6 +19,18 @@ class Audio:
         self.srate = srate
         self.values = values
         self.freq = 0
+        
+
+        prev = np.roll(self.values, 1)
+
+        starts = ((prev <= 0) & (self.values > 0))
+        ends =   ((prev >= 0) & (self.values < 0))
+
+        self.zero_crossing_starts = Audio.get_non_zero_indices(starts)
+        self.zero_crossing_ends = Audio.get_non_zero_indices(ends)
+
+        self.start_index = 0
+        self.end_index = 0
 
     @classmethod
     def fromfilename(cls, filename):
@@ -34,6 +46,10 @@ class Audio:
     @classmethod
     def from_arr(cls, srate, arr):
         return cls(srate, arr)
+    
+    def get_non_zero_indices(indices):
+        output = indices * np.arange(indices.shape[0])
+        return output[output != 0]
         
     def samples(self):
         return self.values.shape[0]
@@ -41,6 +57,9 @@ class Audio:
     def set_freq(self, cmat, freqs):
         transform = M.cdft(cmat, self.values)
         self.freq = M.get_freq(transform, freqs)
+    
+
+
 
 class SignalData():
     

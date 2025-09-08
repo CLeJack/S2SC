@@ -1,10 +1,11 @@
 import numpy as np
 
-
-
 def get_freqs(ref_freq, semitone, low_exp, high_exp):
     # freq = fundamental * SEMITONE^exponent
     return np.array([ref_freq * semitone ** n for n in range(low_exp, high_exp + 1)])
+
+def get_midi_freqs():
+    return get_freqs(440, 2**(1/12), -57, 42)
 
 
 def get_index(freq, refFreq, semitone, minExponent):

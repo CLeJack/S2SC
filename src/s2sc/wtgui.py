@@ -3,7 +3,11 @@ from tkinter import ttk, filedialog, messagebox
 import os
 import numpy as np
 import math
+from pathlib import Path
+import time
 
+import wtmaker as WT
+from functools import reduce
 
 class AudioAnalysisChild:
     """Individual audio analysis component with canvas and controls"""
@@ -17,8 +21,6 @@ class AudioAnalysisChild:
         self.audio_data = None
         self.sample_rate = 44100
         self.display_samples = 1000
-        self.starting_zero_crossings = 0
-        self.ending_zero_crossings = 0
         
         # Index tracking
         self.start_index = 0
@@ -100,9 +102,7 @@ class AudioAnalysisChild:
             return
         
         # Prepare data for display
-        # s = (self.sample_rate/self.get_frequency())*4
         display_data = self.audio_data[:self.display_samples]
-        # display_data = self.audio_data[:s]
         if len(display_data) == 0:
             return
         
@@ -247,8 +247,6 @@ class AnalysisWindow:
         
         # Add initial child component
         self.add_audio_component()
-        self.add_audio_component()
-        self.add_audio_component()
         
         # Handle window close
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -290,26 +288,34 @@ class AnalysisWindow:
         """Handle mouse wheel scrolling"""
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
     
-    def add_audio_component(self):
-        """Add a new audio analysis component"""
+    def add_audio_component(self, sample_rate=44100, audio_data=None, 
+                           start_indices=None, end_indices=None, frequency=None):
+        """Add a new audio analysis component with provided data"""
         index = len(self.children)
-        child = AudioAnalysisChild(self.scrollable_frame, index)
+        
+        # Use provided data or generate sample data for demonstration
+        if audio_data is None:
+            # Generate sample audio data for demonstration
+            duration = 0.1  # 0.1 seconds
+            t = np.linspace(0, duration, int(sample_rate * duration))
+            freq = frequency if frequency is not None else (440.0 + (index * 100))
+            audio_data = np.sin(2 * np.pi * freq * t)
+            # Add some noise
+            audio_data += 0.1 * np.random.randn(len(audio_data))
+        else:
+            freq = frequency if frequency is not None else 440.0
+        
+        child = AudioAnalysisChild(
+            self.scrollable_frame, 
+            index, 
+            sample_rate=sample_rate,
+            audio_data=audio_data,
+            start_indices=start_indices,
+            end_indices=end_indices,
+            frequency=freq
+        )
+        
         self.children.append(child)
-        
-        # Generate sample audio data for demonstration
-        sample_rate = 44100
-        duration = 0.1  # 0.1 seconds
-        t = np.linspace(0, duration, int(sample_rate * duration))
-        frequency = 440.0 + (index * 100)  # Different frequency for each component
-        audio_data = np.sin(2 * np.pi * frequency * t)
-        
-        # Add some noise
-        audio_data += 0.1 * np.random.randn(len(audio_data))
-        
-        # Update the component with sample data
-        child.update_audio_data(audio_data, len(audio_data))
-        child.set_frequency(frequency)
-        
         return child
     
     def get_children(self):
@@ -335,7 +341,7 @@ class AnalysisWindow:
         self.window.destroy()
 
 
-class WTGui:
+class AudioAnalysisGUI:
     """Main GUI application"""
     
     def __init__(self):
@@ -347,8 +353,17 @@ class WTGui:
         self.output_directory = tk.StringVar(value="../../output/")
         self.filename = tk.StringVar()
         self.input_directory = ""
+
+        self.cmatrix = []
+        self.srate = 48000
+        self.samples = 0
+        self.freqs = WT.T.get_midi_freqs()
+
+        self.lastdir = ''
         
         self.setup_gui()
+
+        self.audio_data = []
     
     def setup_gui(self):
         """Setup the main GUI components"""
@@ -398,7 +413,7 @@ class WTGui:
         self.load_button.pack(side='left')
         
         # Status label
-        self.status_label = ttk.Label(load_frame, text="No directory selected")
+        self.status_label = ttk.Label(load_frame, text="")
         self.status_label.pack(side='left', padx=(10, 0))
     
     def browse_output_directory(self):
@@ -418,15 +433,85 @@ class WTGui:
         """Get the current filename"""
         return self.filename.get()
     
+    def create_audio_data(self, files):
+        start_time = time.time()
+        for i, f in enumerate(files):
+            self.audio_data.append(WT.Audio.fromfilename(self.input_directory/f))
+            if(time.time() - start_time > 1):
+                self.status_label.config(text=f"Selected: {self.input_directory} \nLoaded {i+ 1} / {len(files)} files")
+                self.status_label.update()
+                start_time = time.time()
+        self.status_label.config(text=f"Selected: {self.input_directory} \nLoaded {i+ 1} / {len(files)} files")
+        self.status_label.update()
+    
+
+    def delay(self, seconds):
+        start_time = time.time()
+        while(time.time() - start_time < seconds):
+            pass
+
+    def update_frequencies(self):
+
+        common_srates = list(map(lambda x: x.srate, self.audio_data))
+        common_srates = list(map(lambda x: x == common_srates[0], common_srates))
+        common_srates = reduce(lambda a, b: a == b, common_srates)
+
+        
+
+        if common_srates:
+
+            self.samples = max(list(map(lambda x: x.samples(), self.audio_data)))
+            self.srate = self.audio_data[0].srate
+
+            self.cmatrix = WT.M.cmatrix(self.samples, self.srate, self.freqs)
+            start_time = time.time()
+            for i, a in enumerate(self.audio_data):
+                a.set_freq(self.cmatrix,self.freqs)
+                if(time.time() - start_time > 1):
+                    self.status_label.config(text=f"Selected: {self.input_directory} \nAnalyzing file {i + 1} / {len(self.audio_data)}")
+                    self.status_label.update()
+                    start_time = time.time()
+            self.status_label.config(text=f"Selected: {self.input_directory} \nAnalyzing file {i + 1} / {len(self.audio_data)}")
+            self.status_label.update()
+        else:
+            self.status_label.config(text=f".wav files had different sample rates.\n Please use file with a common sample rate")
+
     def load_files(self):
         """Load files from selected directory and open analysis window"""
-        directory = filedialog.askdirectory(title="Select Input Directory")
-        if directory:
-            self.input_directory = directory
-            self.status_label.config(text=f"Selected: {os.path.basename(directory)}")
-            
-            # Open analysis window
-            self.open_analysis_window()
+
+        if(os.path.exists('lastdir')):
+            with open('lastdir', 'r') as f:
+                self.lastdir = Path(f.readline())
+
+        directory = filedialog.askdirectory(title="Select Input Directory", initialdir=str(self.lastdir))
+
+        if directory is not None:
+            self.input_directory = Path(directory)
+            with open('lastdir','w') as f:
+                f.write(str(self.input_directory))
+
+            # self.status_label.config(text=f"Selected: {os.path.basename(directory)} Loading ")
+            files = os.listdir(directory)
+            files = list(filter(lambda x: x.endswith('.wav'), files))
+
+            if len(files) == 0:
+                self.status_label.config(text=f"No .wav files found")
+            else:
+                self.status_label.config(text=f"Selected: {self.input_directory} \nLoading {len(files)} files")
+                self.status_label.update()
+                self.delay(1.5)
+
+                self.create_audio_data(files)
+                self.delay(1.5)
+
+                self.update_frequencies()
+                self.delay(1.5)
+
+                self.status_label.config(text=f"Selected: {self.input_directory} \nFile load complete!")
+                self.status_label.update()
+                self.delay(2)
+                
+                self.open_analysis_window()
     
     def open_analysis_window(self):
         """Open the analysis window"""
@@ -462,7 +547,9 @@ class ModelController:
             result = {
                 'frequency': child.get_frequency(),
                 'start_index': child.get_start_index(),
-                'end_index': child.get_end_index()
+                'offset_index': child.get_offset_index(),
+                'end_index': child.get_end_index(),
+                'sample_length': child.get_sample_length()
             }
             results.append(result)
         return results

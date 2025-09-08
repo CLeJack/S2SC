@@ -5,8 +5,8 @@ import wtgui
 
 if __name__ == "__main__":
     # Create and run the application
-    app = wtgui.WTGui()
-    
+    app = wtgui.AudioAnalysisGUI()
+
     # Example of model integration
     # model = ModelController(app)
     

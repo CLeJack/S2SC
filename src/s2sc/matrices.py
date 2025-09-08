@@ -33,8 +33,7 @@ def cdft_coeff(cmatrix,signal, **kwargs):
     kwargs for row and ind(ex) can be passed to determine what portion
     of the matrix to run this function on.
     
-    This feature is not used in the s2sc project but it could, for example,
-    allow matrix multiplication to occur over a subset of frequencies
+    This can be used to allow matrix multiplication to occur over a subset of frequencies
     or a subset of the target signal which would reduce the computational cost.
 
     """
