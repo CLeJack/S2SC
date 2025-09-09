@@ -223,7 +223,7 @@ class AudioAnalysisChild:
 class AnalysisWindow:
     """Analysis window with scrollable audio components"""
     
-    def __init__(self, parent):
+    def __init__(self, parent, output_directory, filename):
         self.parent = parent
         self.children = []
         
@@ -232,6 +232,9 @@ class AnalysisWindow:
         self.window.title("Audio Analysis")
         self.window.geometry("800x600")
         self.window.transient(parent)
+
+        self.filename = filename
+        self.output_directory = output_directory
         
         # Center the window
         self.window.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
@@ -301,20 +304,13 @@ class AnalysisWindow:
         
         self.children.append(AudioAnalysisChild(self.scrollable_frame, index, audio_data))
     
-    def get_children(self):
-        """Get all audio analysis children"""
-        return self.children
-    
     def on_create(self):
         """Handle create button click - placeholder for model integration"""
         # This function will be overridden by the model portion
-        print("Create button clicked - placeholder for model integration")
-        print("Analysis data:")
-        for i, child in enumerate(self.children):
-            print(f"  Component {i}:")
-            print(f"    Frequency: {child.get_frequency()}")
-            print(f"    Start Index: {child.get_start_index()}")
-            print(f"    End Index: {child.get_end_index()}")
+        print("Creating Wavetable")
+        
+        WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename )
+        
         
         messagebox.showinfo("Create", "Analysis complete! (Placeholder function)")
         self.on_close()
@@ -334,7 +330,7 @@ class AudioAnalysisGUI:
         
         # Variables for storing values
         self.output_directory = tk.StringVar(value="../../output/")
-        self.filename = tk.StringVar()
+        self.filename = tk.StringVar(value="wavetable")
         self.input_directory = ""
 
         self.cmatrix = []
@@ -407,14 +403,7 @@ class AudioAnalysisGUI:
         )
         if directory:
             self.output_directory.set(directory)
-    
-    def get_output_directory(self):
-        """Get the current output directory"""
-        return self.output_directory.get()
-    
-    def get_filename(self):
-        """Get the current filename"""
-        return self.filename.get()
+
     
     def create_audio_data(self, files):
         start_time = time.time()
@@ -500,7 +489,7 @@ class AudioAnalysisGUI:
     
     def open_analysis_window(self):
         """Open the analysis window"""
-        analysis_window = AnalysisWindow(self.root)
+        analysis_window = AnalysisWindow(self.root, self.output_directory.get(), self.filename.get())
         
         # You can add more audio components here if needed
         # analysis_window.add_audio_component()
