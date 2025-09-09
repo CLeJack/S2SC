@@ -18,13 +18,9 @@ class AudioAnalysisChild:
         self.callback_update_audio = callback_update_audio
         
         # Audio data
-        self.audio_data = None
-        self.sample_rate = 44100
-        self.display_samples = 1000
+        self.display_samples = 0
         
         # Index tracking
-        self.start_index = 0
-        self.end_index = 0
         self.green_line_x = 0
         self.red_line_x = 0
         
@@ -33,13 +29,11 @@ class AudioAnalysisChild:
         self.container.pack(fill='x', padx=5, pady=5)
         
         # Frequency controls
-        freq_frame = ttk.Frame(self.container)
-        freq_frame.pack(fill='x', pady=(0, 5))
+        self.freq_frame = ttk.LabelFrame(self.container, text = "Status")
+        self.freq_frame.pack(fill='x', pady=5)
         
-        ttk.Label(freq_frame, text="Frequency (Hz):").pack(side='left')
-        self.freq_var = tk.StringVar(value="440.0")
-        self.freq_entry = ttk.Entry(freq_frame, textvariable=self.freq_var, width=10)
-        self.freq_entry.pack(side='left', padx=(5, 0))
+        self.status_label = ttk.Label(self.freq_frame, text=self.get_analysis_text(), width = 100)
+        self.status_label.pack(side='left', padx=5)
         
         # Canvas for audio waveform
         self.canvas = tk.Canvas(self.container, height=150, bg='white', relief='sunken', borderwidth=1)
@@ -69,6 +63,12 @@ class AudioAnalysisChild:
         
         # Bind canvas resize
         self.canvas.bind('<Configure>', self.on_canvas_resize)
+
+    def get_analysis_text(self):
+        audio_data = AudioAnalysisGUI.audio_data[self.index]
+        expected =  audio_data.period_samples()
+        actual = audio_data.zero_crossing_end() - audio_data.zero_crossing_start()
+        return f"Frequency (Hz): {audio_data.freq:.2f} | Expected Samples {expected} | Actual Samples: {actual}"
         
     def get_frequency(self):
         """Get the current frequency value"""
@@ -81,18 +81,17 @@ class AudioAnalysisChild:
         """Set the frequency value"""
         self.freq_var.set(str(freq))
     
-    def update_audio_data(self, audio_array, sample_size):
+    def update_audio_data(self, sample_size):
         """Callback function to update audio waveform display"""
-        self.audio_data = np.array(audio_array)
         self.display_samples = min(sample_size, len(self.audio_data))
-        self.end_index = min(self.display_samples - 1, len(self.audio_data) - 1)
         self.draw_waveform()
     
     def draw_waveform(self):
         """Draw the audio waveform on canvas"""
         self.canvas.delete("all")
+        audio_data = AudioAnalysisGUI.audio_data[self.index]
         
-        if self.audio_data is None or len(self.audio_data) == 0:
+        if audio_data is None or audio_data.samples() == 0:
             return
         
         canvas_width = self.canvas.winfo_width()
@@ -102,8 +101,9 @@ class AudioAnalysisChild:
             return
         
         # Prepare data for display
-        display_data = self.audio_data[:self.display_samples]
-        if len(display_data) == 0:
+        self.display_samples = 5 * audio_data.period_samples()
+        display_data = audio_data.values[:self.display_samples]
+        if display_data.shape[0] == 0:
             return
         
         # Normalize audio data
@@ -113,7 +113,7 @@ class AudioAnalysisChild:
             normalized_data = display_data
         
         # Calculate positions
-        x_scale = canvas_width / len(display_data)
+        x_scale = canvas_width / display_data.shape[0]
         y_center = canvas_height // 2
         y_scale = (canvas_height - 20) // 2
         
@@ -131,79 +131,85 @@ class AudioAnalysisChild:
         self.canvas.create_line(0, y_center, canvas_width, y_center, fill='gray', dash=(2, 2))
         
         # Update line positions
-        self.update_lines()
+        self.update_lines(audio_data)
     
-    def update_lines(self):
+    def update_lines(self, audio_data):
         """Update the position of start and end lines"""
         canvas_width = self.canvas.winfo_width()
-        
-        if self.audio_data is None or len(self.audio_data) == 0:
-            return
         
         x_scale = canvas_width / self.display_samples
         
         # Green line (start)
-        self.green_line_x = self.start_index * x_scale
-        self.canvas.create_line(self.green_line_x, 0, self.green_line_x, 
-                               self.canvas.winfo_height(), fill='green', width=2)
+        ref = audio_data.zero_crossing_start() * x_scale
         
-        # Red line (end)
-        self.red_line_x = self.end_index * x_scale
-        self.canvas.create_line(self.red_line_x, 0, self.red_line_x, 
-                               self.canvas.winfo_height(), fill='red', width=2)
+        if self.green_line_x != ref:
+            self.green_line_x = ref
+            self.canvas.create_line(self.green_line_x, 0, self.green_line_x, 
+                                self.canvas.winfo_height(), fill='green', width=2)
+            
+            # Red line (end)
+            self.red_line_x = audio_data.find_nearest_period_end() * x_scale
+            self.canvas.create_line(self.red_line_x, 0, self.red_line_x, 
+                                self.canvas.winfo_height(), fill='red', width=2)
+        else:
+            self.green_line_x = audio_data.zero_crossing_start() * x_scale
+            self.canvas.create_line(self.green_line_x, 0, self.green_line_x, 
+                                self.canvas.winfo_height(), fill='green', width=2)
+            
+            ref = audio_data.zero_crossing_end() * x_scale
+
+            if self.red_line_x != ref:
+                self.red_line_x = ref
+                self.canvas.create_line(self.red_line_x, 0, self.red_line_x, 
+                                    self.canvas.winfo_height(), fill='red', width=2)
+        
+        self.start_label.config(text=str(audio_data.zero_crossing_start()))
+        self.end_label.config(text=str(audio_data.zero_crossing_end()))
+        self.status_label.config(text = str(self.get_analysis_text()))
+
     
-    def find_zero_crossing(self, index, direction):
-        """Find the nearest zero crossing"""
-        if self.audio_data is None or len(self.audio_data) == 0:
-            return index
-        
-        current_index = max(0, min(index, len(self.audio_data) - 1))
-        
-        if direction > 0:  # Moving right
-            for i in range(current_index, min(len(self.audio_data) - 1, self.display_samples)):
-                if (self.audio_data[i] >= 0 and self.audio_data[i + 1] < 0) or \
-                   (self.audio_data[i] < 0 and self.audio_data[i + 1] >= 0):
-                    return i
-        else:  # Moving left
-            for i in range(current_index, 0, -1):
-                if (self.audio_data[i] >= 0 and self.audio_data[i - 1] < 0) or \
-                   (self.audio_data[i] < 0 and self.audio_data[i - 1] >= 0):
-                    return i
-        
-        return current_index
     
     def move_start_left(self):
         """Move start index to the left (lock to zero crossing)"""
-        new_index = self.find_zero_crossing(self.start_index - 1, -1)
-        self.start_index = max(0, new_index)
-        self.start_label.config(text=str(self.start_index))
+        a =  AudioAnalysisGUI.audio_data[self.index]
+        # self.start_index = a.start_index_neg()
+        a.start_index_neg()
+        # self.start_label.config(text=str(a.zero_crossing_start()))
+        # self.end_label.config(text=str(a.zero_crossing_end()))
+        # self.status_label.config(text = str(self.get_analysis_text()))
         self.draw_waveform()
     
     def move_start_right(self):
         """Move start index to the right (lock to zero crossing)"""
-        new_index = self.find_zero_crossing(self.start_index + 1, 1)
-        self.start_index = min(self.end_index, new_index)
-        self.start_label.config(text=str(self.start_index))
+        a =  AudioAnalysisGUI.audio_data[self.index]
+        # self.start_index = a.start_index_pos()
+        a.start_index_pos()
+        # self.start_label.config(text=str(a.zero_crossing_start()))
+        # self.end_label.config(text=str(a.zero_crossing_end()))
+        # self.status_label.config(text =str(self.get_analysis_text()))
         self.draw_waveform()
     
     def move_end_left(self):
         """Move end index to the left (lock to zero crossing)"""
-        new_index = self.find_zero_crossing(self.end_index - 1, -1)
-        self.end_index = max(self.start_index, new_index)
-        self.end_label.config(text=str(self.end_index))
+        a =  AudioAnalysisGUI.audio_data[self.index]
+        # self.end_index = a.end_index_neg()
+        a.end_index_neg()
+        # self.end_label.config(text=str(a.zero_crossing_end()))
+        # self.status_label.config(text = str(self.get_analysis_text()))
         self.draw_waveform()
     
     def move_end_right(self):
         """Move end index to the right (lock to zero crossing)"""
-        new_index = self.find_zero_crossing(self.end_index + 1, 1)
-        self.end_index = min(self.display_samples - 1, new_index)
-        self.end_label.config(text=str(self.end_index))
+        a =  AudioAnalysisGUI.audio_data[self.index]
+        # self.end_index = a.end_index_pos()
+        a.end_index_pos()
+        # self.end_label.config(text=str(a.zero_crossing_end()))
+        # self.status_label.config(text =str(self.get_analysis_text()))
         self.draw_waveform()
     
     def on_canvas_resize(self, event):
         """Handle canvas resize"""
-        if self.audio_data is not None:
-            self.draw_waveform()
+        self.draw_waveform()
     
     def get_start_index(self):
         """Get current start index"""
@@ -217,7 +223,7 @@ class AudioAnalysisChild:
 class AnalysisWindow:
     """Analysis window with scrollable audio components"""
     
-    def __init__(self, parent):
+    def __init__(self, parent, output_directory, filename):
         self.parent = parent
         self.children = []
         
@@ -226,6 +232,9 @@ class AnalysisWindow:
         self.window.title("Audio Analysis")
         self.window.geometry("800x600")
         self.window.transient(parent)
+
+        self.filename = filename
+        self.output_directory = output_directory
         
         # Center the window
         self.window.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
@@ -246,7 +255,9 @@ class AnalysisWindow:
         self.create_button.pack(side='right')
         
         # Add initial child component
-        self.add_audio_component()
+        for i, a in enumerate(AudioAnalysisGUI.audio_data):
+            self.add_audio_component(i, a)
+            self.children[i].draw_waveform()
         
         # Handle window close
         self.window.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -288,50 +299,18 @@ class AnalysisWindow:
         """Handle mouse wheel scrolling"""
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
     
-    def add_audio_component(self, sample_rate=44100, audio_data=None, 
-                           start_indices=None, end_indices=None, frequency=None):
+    def add_audio_component(self, index, audio_data):
         """Add a new audio analysis component with provided data"""
-        index = len(self.children)
         
-        # Use provided data or generate sample data for demonstration
-        if audio_data is None:
-            # Generate sample audio data for demonstration
-            duration = 0.1  # 0.1 seconds
-            t = np.linspace(0, duration, int(sample_rate * duration))
-            freq = frequency if frequency is not None else (440.0 + (index * 100))
-            audio_data = np.sin(2 * np.pi * freq * t)
-            # Add some noise
-            audio_data += 0.1 * np.random.randn(len(audio_data))
-        else:
-            freq = frequency if frequency is not None else 440.0
-        
-        child = AudioAnalysisChild(
-            self.scrollable_frame, 
-            index, 
-            sample_rate=sample_rate,
-            audio_data=audio_data,
-            start_indices=start_indices,
-            end_indices=end_indices,
-            frequency=freq
-        )
-        
-        self.children.append(child)
-        return child
-    
-    def get_children(self):
-        """Get all audio analysis children"""
-        return self.children
+        self.children.append(AudioAnalysisChild(self.scrollable_frame, index, audio_data))
     
     def on_create(self):
         """Handle create button click - placeholder for model integration"""
         # This function will be overridden by the model portion
-        print("Create button clicked - placeholder for model integration")
-        print("Analysis data:")
-        for i, child in enumerate(self.children):
-            print(f"  Component {i}:")
-            print(f"    Frequency: {child.get_frequency()}")
-            print(f"    Start Index: {child.get_start_index()}")
-            print(f"    End Index: {child.get_end_index()}")
+        print("Creating Wavetable")
+        
+        WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename )
+        
         
         messagebox.showinfo("Create", "Analysis complete! (Placeholder function)")
         self.on_close()
@@ -343,7 +322,7 @@ class AnalysisWindow:
 
 class AudioAnalysisGUI:
     """Main GUI application"""
-    
+    audio_data = []
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Audio Analysis Tool")
@@ -351,7 +330,7 @@ class AudioAnalysisGUI:
         
         # Variables for storing values
         self.output_directory = tk.StringVar(value="../../output/")
-        self.filename = tk.StringVar()
+        self.filename = tk.StringVar(value="wavetable")
         self.input_directory = ""
 
         self.cmatrix = []
@@ -363,7 +342,7 @@ class AudioAnalysisGUI:
         
         self.setup_gui()
 
-        self.audio_data = []
+        
     
     def setup_gui(self):
         """Setup the main GUI components"""
@@ -424,19 +403,14 @@ class AudioAnalysisGUI:
         )
         if directory:
             self.output_directory.set(directory)
-    
-    def get_output_directory(self):
-        """Get the current output directory"""
-        return self.output_directory.get()
-    
-    def get_filename(self):
-        """Get the current filename"""
-        return self.filename.get()
+
     
     def create_audio_data(self, files):
         start_time = time.time()
         for i, f in enumerate(files):
-            self.audio_data.append(WT.Audio.fromfilename(self.input_directory/f))
+            a = WT.Audio.fromfilename(self.input_directory/f)
+            # a.set_start_near_max_peak()
+            self.audio_data.append(a)
             if(time.time() - start_time > 1):
                 self.status_label.config(text=f"Selected: {self.input_directory} \nLoaded {i+ 1} / {len(files)} files")
                 self.status_label.update()
@@ -459,19 +433,19 @@ class AudioAnalysisGUI:
         
 
         if common_srates:
-
-            self.samples = max(list(map(lambda x: x.samples(), self.audio_data)))
-            self.srate = self.audio_data[0].srate
+            data = AudioAnalysisGUI.audio_data
+            self.samples = max(list(map(lambda x: x.samples(), data)))
+            self.srate = data[0].srate
 
             self.cmatrix = WT.M.cmatrix(self.samples, self.srate, self.freqs)
             start_time = time.time()
-            for i, a in enumerate(self.audio_data):
+            for i, a in enumerate(data):
                 a.set_freq(self.cmatrix,self.freqs)
                 if(time.time() - start_time > 1):
-                    self.status_label.config(text=f"Selected: {self.input_directory} \nAnalyzing file {i + 1} / {len(self.audio_data)}")
+                    self.status_label.config(text=f"Selected: {self.input_directory} \nAnalyzing file {i + 1} / {len(data)}")
                     self.status_label.update()
                     start_time = time.time()
-            self.status_label.config(text=f"Selected: {self.input_directory} \nAnalyzing file {i + 1} / {len(self.audio_data)}")
+            self.status_label.config(text=f"Selected: {self.input_directory} \nAnalyzing file {i + 1} / {len(data)}")
             self.status_label.update()
         else:
             self.status_label.config(text=f".wav files had different sample rates.\n Please use file with a common sample rate")
@@ -499,23 +473,23 @@ class AudioAnalysisGUI:
             else:
                 self.status_label.config(text=f"Selected: {self.input_directory} \nLoading {len(files)} files")
                 self.status_label.update()
-                self.delay(1.5)
+                self.delay(.5)
 
                 self.create_audio_data(files)
-                self.delay(1.5)
+                self.delay(.5)
 
                 self.update_frequencies()
-                self.delay(1.5)
+                self.delay(.5)
 
                 self.status_label.config(text=f"Selected: {self.input_directory} \nFile load complete!")
                 self.status_label.update()
-                self.delay(2)
+                self.delay(.5)
                 
                 self.open_analysis_window()
     
     def open_analysis_window(self):
         """Open the analysis window"""
-        analysis_window = AnalysisWindow(self.root)
+        analysis_window = AnalysisWindow(self.root, self.output_directory.get(), self.filename.get())
         
         # You can add more audio components here if needed
         # analysis_window.add_audio_component()
@@ -523,33 +497,3 @@ class AudioAnalysisGUI:
     def run(self):
         """Start the GUI application"""
         self.root.mainloop()
-
-
-# Example usage and model integration points
-class ModelController:
-    """Example model controller to show integration points"""
-    
-    def __init__(self, gui):
-        self.gui = gui
-    
-    def get_output_directory(self):
-        """Get output directory from GUI"""
-        return self.gui.get_output_directory()
-    
-    def get_filename(self):
-        """Get filename from GUI"""
-        return self.gui.get_filename()
-    
-    def process_analysis_data(self, analysis_children):
-        """Process data from analysis window children"""
-        results = []
-        for child in analysis_children:
-            result = {
-                'frequency': child.get_frequency(),
-                'start_index': child.get_start_index(),
-                'offset_index': child.get_offset_index(),
-                'end_index': child.get_end_index(),
-                'sample_length': child.get_sample_length()
-            }
-            results.append(result)
-        return results
