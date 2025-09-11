@@ -114,14 +114,12 @@ class Audio:
         self.end_index = min(index, self.zero_crossing_starts.shape[0] - 1) 
         output = max(self.zero_crossing_end(), self.zero_crossing_start())
         
-        print(f"Indices: {self.zero_crossing_start()}, {output} | Expected Samples: {self.period_samples()} | Diff: {output - self.zero_crossing_start()}")
         return output
     
     def create_frame(self, frame_size, peak = 32767):
         start = self.zero_crossing_start()
         end = self.zero_crossing_end()
         final_slice = self.values[start:end]
-        print(start, end, final_slice.shape)
         x = np.linspace(0, frame_size, final_slice.shape[0])
         f = interpolate.interp1d(x,final_slice)
         frame = f(np.arange(frame_size))
@@ -133,8 +131,9 @@ class Audio:
         
         frames = []        
         
-        for a in audio_data:
+        for i, a in enumerate(audio_data):
             frames.append(a.create_frame(2048))
+            print(f"Frame: {i},| Samples: {a.selected_samples()} | Freq: {a.freq:.2f}")
 
         arr = np.concatenate(frames, axis = 0)
         arr = arr.flatten().astype(np.int16)

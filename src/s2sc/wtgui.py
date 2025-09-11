@@ -313,16 +313,14 @@ class AnalysisWindow:
         # This function will be overridden by the model portion
         print("Creating Wavetable")
 
-
-        print(f"Export State:\n.wav ext: {self.parent_gui.wavext.get()}"
-              + f"\n.wt ext: {self.parent_gui.wtext.get()}")
-
-        AudioAnalysisGUI.audio_data.sort(reverse = True) #sort to put longest samples/lowest frequency at the start of wavetable
-
+        if self.parent_gui.sort.get():
+            AudioAnalysisGUI.audio_data.sort(reverse = True) #sort to put longest samples/lowest frequency at the start of wavetable
 
 
         WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename)
         WT.Audio.create_wt_wavetable(self.output_directory, self.filename)
+
+        AudioAnalysisGUI.audio_data=[] #reset system to prepare for next load
 
         messagebox.showinfo("Create", "Wavetables completed!")
         self.on_close()
@@ -422,15 +420,13 @@ class AudioAnalysisGUI:
         ext_frame = ttk.LabelFrame(checkbox_section, text = "File Type",padding="5")
         ext_frame.pack(side='left', pady=(0, 10))
 
-        self.wavext = tk.BooleanVar()
-        self.wavext.set(True)
-        self.wtext = tk.BooleanVar()
+ 
+        self.sort = tk.BooleanVar()
+        self.sort.set(True)
 
-        self.wavextbox = tk.Checkbutton(ext_frame, text="wav", variable=self.wavext)
-        self.wtextbox = tk.Checkbutton(ext_frame, text="wt", variable=self.wtext)
+        self.sortbox = tk.Checkbutton(checkbox_section, text="Frequency Sort", variable=self.sort)
 
-        self.wavextbox.pack(side = 'left')
-        self.wtextbox.pack(side = 'left')
+        self.sortbox.pack(side = 'left')
 
     
     def create_status_section(self, parent):
