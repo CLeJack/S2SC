@@ -223,7 +223,8 @@ class AudioAnalysisChild:
 class AnalysisWindow:
     """Analysis window with scrollable audio components"""
     
-    def __init__(self, parent, output_directory, filename):
+    def __init__(self,parent_gui, parent, output_directory, filename):
+        self.parent_gui = parent_gui
         self.parent = parent
         self.children = []
         
@@ -242,13 +243,16 @@ class AnalysisWindow:
         # Main frame
         main_frame = ttk.Frame(self.window)
         main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+        analysis_frame = ttk.Frame(main_frame)
+        analysis_frame.pack(fill='both', expand=True, padx=10, pady=10)
         
         # Create scrollable frame
-        self.create_scrollable_frame(main_frame)
+        self.create_scrollable_frame(analysis_frame)
         
         # Create button frame
         button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill='x', pady=(10, 0))
+        button_frame.pack(side= "bottom", fill='x', pady=(10, 0))
         
         # Create button
         self.create_button = ttk.Button(button_frame, text="Create", command=self.on_create)
@@ -308,12 +312,21 @@ class AnalysisWindow:
         """Handle create button click - placeholder for model integration"""
         # This function will be overridden by the model portion
         print("Creating Wavetable")
-        
-        WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename )
-        
-        
-        messagebox.showinfo("Create", "Analysis complete! (Placeholder function)")
+
+
+        print(f"Export State:\n.wav ext: {self.parent_gui.wavext.get()}"
+              + f"\n.wt ext: {self.parent_gui.wtext.get()}")
+
+        AudioAnalysisGUI.audio_data.sort(reverse = True) #sort to put longest samples/lowest frequency at the start of wavetable
+
+
+
+        WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename)
+        WT.Audio.create_wt_wavetable(self.output_directory, self.filename)
+
+        messagebox.showinfo("Create", "Wavetables completed!")
         self.on_close()
+
     
     def on_close(self):
         """Close the analysis window"""
@@ -326,7 +339,7 @@ class AudioAnalysisGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Audio Analysis Tool")
-        self.root.geometry("600x400")
+        self.root.geometry("600x500")
         
         # Variables for storing values
         self.output_directory = tk.StringVar(value="../../output/")
@@ -357,6 +370,11 @@ class AudioAnalysisGUI:
         
         # Load files button
         self.create_load_files_section(main_frame)
+
+        self.create_checkbox_section(main_frame)
+
+        self.create_status_section(main_frame)
+
     
     def create_output_section(self, parent):
         """Create output directory selection section"""
@@ -391,8 +409,36 @@ class AudioAnalysisGUI:
         self.load_button = ttk.Button(load_frame, text="Load Files", command=self.load_files)
         self.load_button.pack(side='left')
         
+        # # Status label
+        # self.status_label = ttk.Label(load_frame, text="")
+        # self.status_label.pack(side='left', padx=(10, 0))
+    
+    def create_checkbox_section(self,parent):
+
+        checkbox_section = ttk.LabelFrame(parent, text="Exports", padding="5")
+        checkbox_section.pack(fill='x', pady=(0, 10))
+        
+        
+        ext_frame = ttk.LabelFrame(checkbox_section, text = "File Type",padding="5")
+        ext_frame.pack(side='left', pady=(0, 10))
+
+        self.wavext = tk.BooleanVar()
+        self.wavext.set(True)
+        self.wtext = tk.BooleanVar()
+
+        self.wavextbox = tk.Checkbutton(ext_frame, text="wav", variable=self.wavext)
+        self.wtextbox = tk.Checkbutton(ext_frame, text="wt", variable=self.wtext)
+
+        self.wavextbox.pack(side = 'left')
+        self.wtextbox.pack(side = 'left')
+
+    
+    def create_status_section(self, parent):
+        status_frame = ttk.LabelFrame(parent, text="Status", padding="5")
+        status_frame.pack(fill='x', pady=(0, 10))
+        
         # Status label
-        self.status_label = ttk.Label(load_frame, text="")
+        self.status_label = ttk.Label(status_frame, text="")
         self.status_label.pack(side='left', padx=(10, 0))
     
     def browse_output_directory(self):
@@ -471,25 +517,28 @@ class AudioAnalysisGUI:
             if len(files) == 0:
                 self.status_label.config(text=f"No .wav files found")
             else:
+                delay_time = .25
                 self.status_label.config(text=f"Selected: {self.input_directory} \nLoading {len(files)} files")
                 self.status_label.update()
-                self.delay(.5)
+                self.delay(delay_time)
 
                 self.create_audio_data(files)
-                self.delay(.5)
+                self.delay(delay_time)
 
                 self.update_frequencies()
-                self.delay(.5)
+                self.delay(delay_time)
 
                 self.status_label.config(text=f"Selected: {self.input_directory} \nFile load complete!")
                 self.status_label.update()
-                self.delay(.5)
+                self.delay(delay_time)
+
+                self.filename.set(self.lastdir.stem)
                 
                 self.open_analysis_window()
     
     def open_analysis_window(self):
         """Open the analysis window"""
-        analysis_window = AnalysisWindow(self.root, self.output_directory.get(), self.filename.get())
+        analysis_window = AnalysisWindow(self, self.root, self.output_directory.get(), self.filename.get())
         
         # You can add more audio components here if needed
         # analysis_window.add_audio_component()

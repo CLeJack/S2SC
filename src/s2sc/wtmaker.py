@@ -7,6 +7,7 @@ from scipy import interpolate
 
 import tuning as T
 import matrices as M
+import wav2wt
 
 import os
 from pathlib import Path
@@ -48,12 +49,18 @@ class Audio:
     def from_arr(cls, srate, arr):
         return cls(srate, arr)
     
+    def __lt__(self,other):
+        return self.selected_samples() < other.selected_samples()
+    
     def get_non_zero_indices(indices):
         output = indices * np.arange(indices.shape[0])
         return output[output != 0]
         
     def samples(self):
         return self.values.shape[0]
+    
+    def selected_samples(self):
+        return self.zero_crossing_end() - self.zero_crossing_start()
     
     def period_samples(self):
         return int(self.srate/max(self.freq,1))
@@ -122,10 +129,11 @@ class Audio:
         return frame
     
     def create_wavetable(audio_data, export_path, file_name):
+
+        
         frames = []        
         
         for a in audio_data:
-            
             frames.append(a.create_frame(2048))
 
         arr = np.concatenate(frames, axis = 0)
@@ -133,3 +141,12 @@ class Audio:
 
         p = Path(export_path) / (file_name + '.wav')
         wavfile.write(p,44100, arr)
+
+    def create_wt_wavetable(export_path, file_name):
+
+        p_in = Path(export_path) / (file_name + '.wav')
+        p_out = Path(export_path) / (file_name + '.wt')
+
+        wav_data, _ = wav2wt.read_wav_file(p_in)
+        wt_data = wav2wt.convert_to_wt_format(wav_data, 2048)
+        wav2wt.save_wt_file(wt_data, p_out)
