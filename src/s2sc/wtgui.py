@@ -68,7 +68,7 @@ class AudioAnalysisChild:
         audio_data = AudioAnalysisGUI.audio_data[self.index]
         expected =  audio_data.period_samples()
         actual = audio_data.zero_crossing_end() - audio_data.zero_crossing_start()
-        return f"Frequency (Hz): {audio_data.freq:.2f} | Expected Samples {expected} | Actual Samples: {actual}"
+        return f"Frequency (Hz): {audio_data.freq:.2f} | Expected Samples {expected} | Actual Samples: {actual}\n{audio_data.filename}"
         
     def get_frequency(self):
         """Get the current frequency value"""
@@ -101,7 +101,7 @@ class AudioAnalysisChild:
             return
         
         # Prepare data for display
-        self.display_samples = 5 * audio_data.period_samples()
+        self.display_samples = 5 * max(audio_data.period_samples(), audio_data.crossing_samples)
         display_data = audio_data.values[:self.display_samples]
         if display_data.shape[0] == 0:
             return
@@ -314,8 +314,14 @@ class AnalysisWindow:
         print("Creating Wavetable")
 
         if self.parent_gui.sort.get():
-            AudioAnalysisGUI.audio_data.sort(reverse = True) #sort to put longest samples/lowest frequency at the start of wavetable
-
+            #sort to put longest samples/lowest frequency at the start of wavetable
+            #based on user selected sample length
+            AudioAnalysisGUI.audio_data.sort(reverse = True) 
+        
+        if self.parent_gui.add_freq_range.get() and self.parent_gui.sort.get():
+            low = WT.T.get_class_label(AudioAnalysisGUI.audio_data[0].freq)
+            high = WT.T.get_class_label(AudioAnalysisGUI.audio_data[-1].freq)
+            self.filename = f"{self.filename}_{low}-{high}"
 
         WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename)
         WT.Audio.create_wt_wavetable(self.output_directory, self.filename)
@@ -425,8 +431,13 @@ class AudioAnalysisGUI:
         self.sort.set(True)
 
         self.sortbox = tk.Checkbutton(checkbox_section, text="Frequency Sort", variable=self.sort)
-
         self.sortbox.pack(side = 'left')
+
+        self.add_freq_range = tk.BooleanVar()
+        self.add_freq_range.set(True)
+
+        self.add_freq_range_box = tk.Checkbutton(checkbox_section, text="Add Freq Range", variable=self.add_freq_range)
+        self.add_freq_range_box.pack(side = 'left')
 
     
     def create_status_section(self, parent):
@@ -529,6 +540,11 @@ class AudioAnalysisGUI:
                 self.delay(delay_time)
 
                 self.filename.set(self.lastdir.stem)
+
+                if self.sort.get():
+                    #sort to put longest samples/lowest frequency at the start of wavetable
+                    #based on algorithmic frequency detection
+                    AudioAnalysisGUI.audio_data.sort(reverse = True) 
                 
                 self.open_analysis_window()
     

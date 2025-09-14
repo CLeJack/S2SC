@@ -1,38 +1,36 @@
 import numpy as np
 
-def get_freqs(ref_freq, semitone, low_exp, high_exp):
+def get_freqs(low_exp, high_exp, ref_freq = 440, semitone = 2**(1/12) ):
     # freq = fundamental * SEMITONE^exponent
     return np.array([ref_freq * semitone ** n for n in range(low_exp, high_exp + 1)])
 
 def get_midi_freqs():
-    return get_freqs(440, 2**(1/12), -57, 42)
+    return get_freqs(-57, 42, 440, 2**(1/12))
 
 
-def get_index(freq, refFreq, semitone, minExponent):
+def get_note_index(freq, ref_freq=440, semitone=2**(1/12), min_exponent= -57):
     # the lowest note of consideration (i.e. C0_exponent) will be considered 0
     # this can then be used to lookup values from the note table by note name of frequency
 
     # reverse calculate_notes()
-    semitone_to_exp = freq / refFreq
+    semitone_to_exp = freq / ref_freq
 
-    exponent = np.log(semitone_to_exp) / np.log(semitone)
-
-    # can't go below the lowest exponent / C0
-    exponent = max(minExponent, exponent)
-    offset = int(0.5 + exponent - minExponent)  # round up to the nearest exponent
-    return offset
+    return int(.5 + np.log(semitone_to_exp) / np.log(semitone) - min_exponent)
 
 # integer based pitch class
-def get_class_index(freq):
+def get_class(index):
+    classes = 'C,Cs,D,Ds,E,F,Fs,G,Gs,A,As,B'.split(',')
+    return classes[index%12]
 
-    offset = get_index(freq)
-    index = offset % 12
-    return index
+def get_octave(index):
+    return int(index/12)
 
-def get_octave(freq):
-    offset = get_index(freq)
-    octave = offset//12
-    return octave
+def get_class_label(freq, ref_freq=440, semitone=2**(1/12)):
+    i = get_note_index(freq, ref_freq= ref_freq, semitone = semitone )
+    c = get_class(i)
+    o = get_octave(i)
+    return c + str(o)
+
 
 def oct_ind_to_freq(freqs, octave, index):
     i = octave*12 + index

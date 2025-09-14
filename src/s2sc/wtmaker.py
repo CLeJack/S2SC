@@ -16,10 +16,11 @@ import re
 
 class Audio:
 
-    def __init__(self, srate, values):
+    def __init__(self, srate, values, filename=''):
         self.srate = srate
         self.values = values[np.argmax(values):].copy() #moving the values away from 0 for convenience
         self.freq = 0
+        self.filename = filename
         
 
         prev = np.roll(self.values, 1)
@@ -29,6 +30,8 @@ class Audio:
 
         self.zero_crossing_starts = Audio.get_non_zero_indices(starts)
         self.zero_crossing_ends = Audio.get_non_zero_indices(ends)
+
+        self.crossing_samples = self.get_crossing_samples()
 
         self.start_min = 0
         self.start_index = 0
@@ -43,7 +46,7 @@ class Audio:
         # so attempt a mixdown if there are more than one channels
         if len(values.shape) > 1:
             values = data[1].sum(axis = 1)
-        return cls(srate, values)
+        return cls(srate, values, filename)
     
     @classmethod
     def from_arr(cls, srate, arr):
@@ -62,12 +65,26 @@ class Audio:
     def selected_samples(self):
         return self.zero_crossing_end() - self.zero_crossing_start()
     
+    def selected_freq(self):
+        return self.selected_samples()/self.srate
+    
     def period_samples(self):
         return int(self.srate/max(self.freq,1))
 
     def set_freq(self, cmat, freqs):
         transform = M.cdft(cmat, self.values)
         self.freq = M.get_freq(transform, freqs)
+
+    def get_crossing_samples(self):
+        #gets # of samples between zero crossing with some filtering
+        prev = np.roll(self.zero_crossing_starts, 1)
+        prev[0] = 0
+
+        counts = np.unique(np.abs((self.zero_crossing_starts - prev)), return_counts = True)
+        mask = counts[1] <= np.median(counts[1])
+        # 4 multiple works with the assumption that higher harmonic content creates more than 2 zero crossings
+        # as would normally be associated with a sinusoid zero crossing count
+        return int(4 * np.median(counts[0][mask]) )
     
     def start_index_pos(self):
         self.start_index = min(self.start_index + 1, self.zero_crossing_starts.shape[0] - 1) 
@@ -133,7 +150,7 @@ class Audio:
         
         for i, a in enumerate(audio_data):
             frames.append(a.create_frame(2048))
-            print(f"Frame: {i},| Samples: {a.selected_samples()} | Freq: {a.freq:.2f}")
+            print(f"Frame: {i},| Samples: {a.selected_samples()} | Freq: {a.selected_freq():.2f}")
 
         arr = np.concatenate(frames, axis = 0)
         arr = arr.flatten().astype(np.int16)
