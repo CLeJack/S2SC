@@ -16,6 +16,8 @@ class AudioAnalysisChild:
         self.parent_frame = parent_frame
         self.index = index
         self.callback_update_audio = callback_update_audio
+
+        self.display_multiplier = tk.IntVar(value=5)
         
         # Audio data
         self.display_samples = 0
@@ -60,6 +62,15 @@ class AudioAnalysisChild:
         self.end_label = ttk.Label(end_frame, text="0", width=8)
         self.end_label.pack(side='left', padx=5)
         ttk.Button(end_frame, text="▶", command=self.move_end_right).pack(side='left')
+
+        self.spinbox = tk.Spinbox(controls_frame, from_=1, to=20, width=10, relief="sunken", repeatdelay=500, repeatinterval=100,
+                     font=("Arial", 12), bg="lightgrey", fg="blue", command=self.spinbox_update, textvariable=self.display_multiplier)
+
+        # Setting options for the Spinbox
+        self.spinbox.config(state="readonly", cursor="hand2", bd=3, justify="center", wrap=True)
+
+        # Placing the Spinbox in the window
+        self.spinbox.pack(side ='left', padx = 5)
         
         # Bind canvas resize
         self.canvas.bind('<Configure>', self.on_canvas_resize)
@@ -101,7 +112,9 @@ class AudioAnalysisChild:
             return
         
         # Prepare data for display
-        self.display_samples = 5 * max(audio_data.period_samples(), audio_data.crossing_samples)
+  
+        self.display_samples = self.display_multiplier.get() * max(audio_data.period_samples(), audio_data.crossing_samples)
+        print(audio_data.values.shape, self.display_samples, audio_data.start_index_pos(), audio_data.end_index_pos())
         display_data = audio_data.values[:self.display_samples]
         if display_data.shape[0] == 0:
             return
@@ -218,6 +231,9 @@ class AudioAnalysisChild:
     def get_end_index(self):
         """Get current end index"""
         return self.end_index
+    
+    def spinbox_update(self):
+        self.draw_waveform()
 
 
 class AnalysisWindow:
@@ -313,15 +329,15 @@ class AnalysisWindow:
         # This function will be overridden by the model portion
         print("Creating Wavetable")
 
+        
+
         if self.parent_gui.sort.get():
             #sort to put longest samples/lowest frequency at the start of wavetable
             #based on user selected sample length
             AudioAnalysisGUI.audio_data.sort(reverse = True) 
         
-        if self.parent_gui.add_freq_range.get() and self.parent_gui.sort.get():
-            low = WT.T.get_class_label(AudioAnalysisGUI.audio_data[0].freq)
-            high = WT.T.get_class_label(AudioAnalysisGUI.audio_data[-1].freq)
-            self.filename = f"{self.filename}_{low}-{high}"
+        if self.parent_gui.include_frame_count.get() and self.parent_gui.sort.get():
+            self.filename = f"{self.filename}_{len(AudioAnalysisGUI.audio_data)}"
 
         WT.Audio.create_wavetable(AudioAnalysisGUI.audio_data, self.output_directory, self.filename)
         WT.Audio.create_wt_wavetable(self.output_directory, self.filename)
@@ -433,11 +449,11 @@ class AudioAnalysisGUI:
         self.sortbox = tk.Checkbutton(checkbox_section, text="Frequency Sort", variable=self.sort)
         self.sortbox.pack(side = 'left')
 
-        self.add_freq_range = tk.BooleanVar()
-        self.add_freq_range.set(True)
+        self.include_frame_count = tk.BooleanVar()
+        self.include_frame_count.set(True)
 
-        self.add_freq_range_box = tk.Checkbutton(checkbox_section, text="Add Freq Range", variable=self.add_freq_range)
-        self.add_freq_range_box.pack(side = 'left')
+        self.include_frame_count_box = tk.Checkbutton(checkbox_section, text="Include Frame Count", variable=self.include_frame_count)
+        self.include_frame_count_box.pack(side = 'left')
 
     
     def create_status_section(self, parent):
@@ -539,7 +555,7 @@ class AudioAnalysisGUI:
                 self.status_label.update()
                 self.delay(delay_time)
 
-                self.filename.set(self.lastdir.stem)
+                self.filename.set(self.input_directory.stem)
 
                 if self.sort.get():
                     #sort to put longest samples/lowest frequency at the start of wavetable
